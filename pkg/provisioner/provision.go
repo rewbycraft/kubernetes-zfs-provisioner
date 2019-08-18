@@ -2,7 +2,9 @@ package provisioner
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os/exec"
+	"path"
 	"strconv"
 
 	log "github.com/Sirupsen/logrus"
@@ -55,11 +57,20 @@ func (p ZFSProvisioner) Provision(options controller.VolumeOptions) (*v1.Persist
 				ReadOnly: false,
 			},
 		}
+	case "iscsi":
+		volumeSource = v1.PersistentVolumeSource{
+			ISCSI: &v1.ISCSIVolumeSource{
+				TargetPortal: serverHostname,
+				IQN: path,
+				Lun: 1,
+				ReadOnly: false,
+			},
+		}
 	}
 
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        options.PVName,
+			Name:        fmt.Sprintf("pvc-%s", options.PVC.UID),
 			Labels:      map[string]string{},
 			Annotations: annotations,
 		},
@@ -89,7 +100,7 @@ func (p ZFSProvisioner) createVolume(options controller.VolumeOptions) (string, 
 
 	switch kind {
 	case "nfs":
-		zfsPath := p.parent.Name + "/" + options.PVName
+		zfsPath := path.Join(p.parent.Name, fmt.Sprintf("pvc-%s", options.PVC.UID))
 		properties := make(map[string]string)
 
 		properties["sharenfs"] = "rw=@10.0.0.0/8"
@@ -109,6 +120,38 @@ func (p ZFSProvisioner) createVolume(options controller.VolumeOptions) (string, 
 		}
 
 		return dataset.Mountpoint, nil
+	case "iscsi":
+		zfsPath := path.Join(p.parent.Name, fmt.Sprintf("pvc-%s", options.PVC.UID))
+		storageRequest := options.PVC.Spec.Resources.Requests[v1.ResourceName(v1.ResourceStorage)]
+		iqn := fmt.Sprintf("%s:pvc-%s",options.Parameters["IQN"], options.PVC.UID)
+
+		volumePath := path.Join("/dev/zvol/", zfsPath)
+
+		tgtTemplate := `
+<target %s>
+     # Provided device as an iSCSI target
+     backing-store %s
+</target>
+`
+
+		tgtConfig := fmt.Sprintf(tgtTemplate, iqn, volumePath)
+
+		err := ioutil.WriteFile(path.Join(p.tgtConfigDir, fmt.Sprintf("pvc-%s.conf", string(options.PVC.UID))), []byte(tgtConfig), 0644)
+		if err != nil {
+			return "", fmt.Errorf("Writing tgt config failed with: %v", err.Error())
+		}
+
+		_, err = zfs.CreateVolume(zfsPath, uint64(storageRequest.Value()), make(map[string]string))
+		if err != nil {
+			return "", fmt.Errorf("Creating ZFS volume failed with: %v", err.Error())
+		}
+
+		_, err = exec.Command("tgt-admin", "-e").Output()
+		if err != nil {
+			return "", fmt.Errorf("Updating tgtd failed.")
+		}
+
+		return iqn, nil
 	}
 
 	return "", fmt.Errorf("Unknown volume kind: %s", kind)

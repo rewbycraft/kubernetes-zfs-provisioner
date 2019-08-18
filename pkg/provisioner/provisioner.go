@@ -20,6 +20,8 @@ type ZFSProvisioner struct {
 
 	persistentVolumeCapacity *prometheus.Desc
 	persistentVolumeUsed     *prometheus.Desc
+
+	tgtConfigDir string
 }
 
 // Describe implements prometheus.Collector
@@ -67,6 +69,8 @@ func NewZFSProvisioner(parent *zfs.Dataset) ZFSProvisioner {
 
 	return ZFSProvisioner{
 		parent: parent,
+		//TODO: Make this a viper option
+		tgtConfigDir: "/etc/tgt/conf.d/",
 
 		persistentVolumeCapacity: prometheus.NewDesc(
 			"zfs_provisioner_persistent_volume_capacity",

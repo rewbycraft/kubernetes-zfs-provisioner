@@ -2,6 +2,9 @@ package provisioner
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"path"
 	"regexp"
 
 	log "github.com/Sirupsen/logrus"
@@ -17,7 +20,7 @@ func (p ZFSProvisioner) Delete(volume *v1.PersistentVolume) error {
 	}
 
 	log.WithFields(log.Fields{
-		"volume": volume.Spec.NFS.Path,
+		"volume": volume.Name,
 	}).Info("Deleted volume")
 	return nil
 }
@@ -29,11 +32,20 @@ func (p ZFSProvisioner) deleteVolume(volume *v1.PersistentVolume) error {
 		return fmt.Errorf("Retrieving ZFS dataset for deletion failed with: %v", err.Error())
 	}
 
+	if volume.Spec.ISCSI != nil {
+		_, err = exec.Command("tgt-admin", "--delete", volume.Spec.ISCSI.IQN).Output()
+		if err != nil {
+			return fmt.Errorf("Updating tgtd failed: %y", err.Error())
+		}
+
+		err = os.Remove(path.Join(p.tgtConfigDir, fmt.Sprintf("%s.conf", string(volume.Name))))
+		if err != nil {
+			return fmt.Errorf("Updating tgtd failed: %y", err.Error())
+		}
+	}
+
 	var dataset *zfs.Dataset
 	for _, child := range children {
-		if child.Type != "filesystem" {
-			continue
-		}
 
 		matched, _ := regexp.MatchString(`.+\/`+volume.Name, child.Name)
 		if matched {
