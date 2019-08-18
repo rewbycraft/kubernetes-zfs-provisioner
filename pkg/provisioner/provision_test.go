@@ -14,12 +14,12 @@ import (
 
 func TestProvision(t *testing.T) {
 	parent, _ := zfs.GetDataset("test/volumes")
-	p := NewZFSProvisioner(parent, "", "127.0.0.1", "", "Delete")
+	p := NewZFSProvisioner(parent)
 
 	options := controller.VolumeOptions{
 		PersistentVolumeReclaimPolicy: v1.PersistentVolumeReclaimDelete,
-		PVName: "pv-testcreate",
-		PVC:    newClaim(resource.MustParse("1G"), []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce, v1.ReadOnlyMany}, nil),
+		PVName:                        "pv-testcreate",
+		PVC:                           newClaim(resource.MustParse("1G"), []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce, v1.ReadOnlyMany}, nil),
 	}
 	pv, err := p.Provision(options)
 

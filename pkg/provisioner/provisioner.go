@@ -1,10 +1,12 @@
 package provisioner
 
-import "strconv"
+import (
+	"os/exec"
+	"strconv"
+)
 
-import "k8s.io/client-go/pkg/api/v1"
 import "github.com/prometheus/client_golang/prometheus"
-import zfs "github.com/simt2/go-zfs"
+import "github.com/simt2/go-zfs"
 import log "github.com/Sirupsen/logrus"
 
 const (
@@ -15,10 +17,6 @@ const (
 // ZFSProvisioner implements the Provisioner interface to create and export ZFS volumes
 type ZFSProvisioner struct {
 	parent *zfs.Dataset // The parent dataset
-
-	shareOptions   string // Additional nfs export options, comma-separated
-	serverHostname string // The hostname that should be returned as NFS Server
-	reclaimPolicy  v1.PersistentVolumeReclaimPolicy
 
 	persistentVolumeCapacity *prometheus.Desc
 	persistentVolumeUsed     *prometheus.Desc
@@ -58,22 +56,17 @@ func (p ZFSProvisioner) Collect(ch chan<- prometheus.Metric) {
 }
 
 // NewZFSProvisioner returns a new ZFSProvisioner
-func NewZFSProvisioner(parent *zfs.Dataset, shareOptions string, serverHostname string, reclaimPolicy string) ZFSProvisioner {
-	var kubernetesReclaimPolicy v1.PersistentVolumeReclaimPolicy
-	// Parse reclaim policy
-	switch reclaimPolicy {
-	case "Delete":
-		kubernetesReclaimPolicy = v1.PersistentVolumeReclaimDelete
-	case "Retain":
-		kubernetesReclaimPolicy = v1.PersistentVolumeReclaimRetain
+func NewZFSProvisioner(parent *zfs.Dataset) ZFSProvisioner {
+
+	hostname, err := exec.Command("hostname", "-f").Output()
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Fatal("Determining server hostname via \"hostname -f\" failed")
 	}
 
 	return ZFSProvisioner{
 		parent: parent,
-
-		shareOptions:   shareOptions,
-		serverHostname: serverHostname,
-		reclaimPolicy:  kubernetesReclaimPolicy,
 
 		persistentVolumeCapacity: prometheus.NewDesc(
 			"zfs_provisioner_persistent_volume_capacity",
@@ -81,7 +74,7 @@ func NewZFSProvisioner(parent *zfs.Dataset, shareOptions string, serverHostname 
 			[]string{"persistent_volume"},
 			prometheus.Labels{
 				"parent":   parent.Name,
-				"hostname": serverHostname,
+				"hostname": string(hostname),
 			},
 		),
 		persistentVolumeUsed: prometheus.NewDesc(
@@ -90,7 +83,7 @@ func NewZFSProvisioner(parent *zfs.Dataset, shareOptions string, serverHostname 
 			[]string{"persistent_volume"},
 			prometheus.Labels{
 				"parent":   parent.Name,
-				"hostname": serverHostname,
+				"hostname": string(hostname),
 			},
 		),
 	}

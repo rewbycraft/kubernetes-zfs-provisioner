@@ -13,15 +13,16 @@ import (
 
 func TestDelete(t *testing.T) {
 	parent, _ := zfs.GetDataset("test/volumes")
-	p := NewZFSProvisioner(parent, "rw=@127.0.0.1", "", "Retain")
+	p := NewZFSProvisioner(parent)
 	options := controller.VolumeOptions{
 		PersistentVolumeReclaimPolicy: v1.PersistentVolumeReclaimDelete,
-		PVName: "pv-testdelete",
-		PVC:    newClaim(resource.MustParse("1G"), []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce, v1.ReadOnlyMany}, nil),
+		PVName:                        "pv-testdelete",
+		PVC:                           newClaim(resource.MustParse("1G"), []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce, v1.ReadOnlyMany}, nil),
 	}
-	pv, _ := p.Provision(options)
+	pv, err := p.Provision(options)
+	assert.NoError(t, err, "Provision should not return an error")
 
-	err := p.Delete(pv)
+	err = p.Delete(pv)
 	assert.NoError(t, err, "Delete should not return an error")
 
 	_, err = os.Stat(pv.Spec.PersistentVolumeSource.NFS.Path)

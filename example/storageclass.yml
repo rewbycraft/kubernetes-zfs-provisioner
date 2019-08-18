@@ -4,4 +4,5 @@ apiVersion: storage.k8s.io/v1beta1
 metadata:
   name: zfs-sc
   namespace: zfs-system
+reclaimPolicy: Delete
 provisioner: gentics.com/zfs

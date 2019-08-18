@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"net/http"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -33,10 +32,7 @@ func main() {
 	viper.AutomaticEnv()
 
 	viper.SetDefault("parent_dataset", "")
-	viper.SetDefault("share_options", "rw=@10.0.0.0/8")
-	viper.SetDefault("server_hostname", "")
 	viper.SetDefault("kube_conf", "kube.conf")
-	viper.SetDefault("kube_reclaim_policy", "Delete")
 	viper.SetDefault("provisioner_name", "gentics.com/zfs")
 	viper.SetDefault("metrics_port", "8080")
 	viper.SetDefault("debug", false)
@@ -80,17 +76,6 @@ func main() {
 		"version": serverVersion.GitVersion,
 	}).Info("Retrieved server version")
 
-	// Determine hostname if not set
-	if viper.GetString("server_hostname") == "" {
-		hostname, err := exec.Command("hostname", "-f").Output()
-		if err != nil {
-			log.WithFields(log.Fields{
-				"error": err,
-			}).Fatal("Determining server hostname via \"hostname -f\" failed")
-		}
-		viper.Set("server_hostname", hostname)
-	}
-
 	// Load ZFS parent dataset
 	if viper.GetString("parent_dataset") == "" {
 		log.WithFields(log.Fields{
@@ -105,7 +90,7 @@ func main() {
 	}
 
 	// Create the provisioner
-	zfsProvisioner := provisioner.NewZFSProvisioner(parent, viper.GetString("share_options"), viper.GetString("server_hostname"), viper.GetString("kube_reclaim_policy"))
+	zfsProvisioner := provisioner.NewZFSProvisioner(parent)
 
 	// Start and export the prometheus collector
 	registry := prometheus.NewPedanticRegistry()
