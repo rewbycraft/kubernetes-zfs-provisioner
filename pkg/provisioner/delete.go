@@ -35,12 +35,19 @@ func (p ZFSProvisioner) deleteVolume(volume *v1.PersistentVolume) error {
 	if volume.Spec.ISCSI != nil {
 		_, err = exec.Command("tgt-admin", "--delete", volume.Spec.ISCSI.IQN).Output()
 		if err != nil {
-			return fmt.Errorf("Updating tgtd failed: %y", err.Error())
+			log.WithFields(log.Fields{
+				"volume": volume.Name,
+			}).Warnf("Updating tgtd failed: %y", err.Error())
 		}
 
-		err = os.Remove(path.Join(p.tgtConfigDir, fmt.Sprintf("%s.conf", string(volume.Name))))
-		if err != nil {
-			return fmt.Errorf("Updating tgtd failed: %y", err.Error())
+		tgtConfFile := path.Join(p.tgtConfigDir, fmt.Sprintf("%s.conf", string(volume.Name)))
+		if _, err := os.Stat(tgtConfFile); err == nil {
+			err = os.Remove(tgtConfFile)
+			if err != nil {
+				log.WithFields(log.Fields{
+					"volume": volume.Name,
+				}).Warnf("Removing tgt config failed: %y", err.Error())
+			}
 		}
 	}
 
@@ -53,12 +60,12 @@ func (p ZFSProvisioner) deleteVolume(volume *v1.PersistentVolume) error {
 			break
 		}
 	}
-	if dataset == nil {
-		err = fmt.Errorf("Volume %v could not be found", &volume)
-	}
 
-	if err != nil {
-		return fmt.Errorf("Retrieving ZFS dataset for deletion failed with: %v", err.Error())
+	if dataset == nil {
+		log.WithFields(log.Fields{
+			"volume": volume.Name,
+		}).Warnf("Volume not found, so nothing to delete: %v", &volume)
+		return nil
 	}
 
 	err = dataset.Destroy(zfs.DestroyRecursive)
